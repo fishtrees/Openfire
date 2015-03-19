@@ -534,58 +534,58 @@ public class XMPPServer {
 
     private void loadModules() {
         // Load boot modules
-        loadModule(RoutingTableImpl.class.getName());
-        loadModule(AuditManagerImpl.class.getName());
-        loadModule(RosterManager.class.getName());
-        loadModule(PrivateStorage.class.getName());
+        loadModule(RoutingTableImpl.class.getName());// 消息路由表，根据JID路由到对应的session
+        loadModule(AuditManagerImpl.class.getName());// 消息审计
+//        loadModule(RosterManager.class.getName());// 用于处理Roster相关的IQ请求或Presence请求
+//        loadModule(PrivateStorage.class.getName());// 用于IQPrivateHandler处理jabber:iq:private的IQ请求
         // Load core modules
-        loadModule(PresenceManagerImpl.class.getName());
-        loadModule(SessionManager.class.getName());
-        loadModule(PacketRouterImpl.class.getName());
-        loadModule(IQRouter.class.getName());
+        loadModule(PresenceManagerImpl.class.getName());// 用于跟踪哪些人在线，隐身的不跟踪
+        loadModule(SessionManager.class.getName()); // 管理当前服务器连接的session
+        loadModule(PacketRouterImpl.class.getName());// 包路由器，负责分发给Message等其他路由器
+        loadModule(IQRouter.class.getName());//
         loadModule(MessageRouter.class.getName());
         loadModule(PresenceRouter.class.getName());
-        loadModule(MulticastRouter.class.getName());
-        loadModule(PacketTransporterImpl.class.getName());
-        loadModule(PacketDelivererImpl.class.getName());
-        loadModule(TransportHandler.class.getName());
-        loadModule(OfflineMessageStrategy.class.getName());
-        loadModule(OfflineMessageStore.class.getName());
-        loadModule(VCardManager.class.getName());
+        loadModule(MulticastRouter.class.getName());// 多播路由器，被Message等其他路由器引用，当消息包含address节点时被使用
+//        loadModule(PacketTransporterImpl.class.getName());// 没人用它！
+        loadModule(PacketDelivererImpl.class.getName()); // 用于分发packet, 依赖消息路由表
+//        loadModule(TransportHandler.class.getName());
+//        loadModule(OfflineMessageStrategy.class.getName());
+//        loadModule(OfflineMessageStore.class.getName());
+//        loadModule(VCardManager.class.getName());
         // Load standard modules
-        loadModule(IQBindHandler.class.getName());
-        loadModule(IQSessionEstablishmentHandler.class.getName());
-        loadModule(IQAuthHandler.class.getName());
-        loadModule(IQPingHandler.class.getName());
-        loadModule(IQPrivateHandler.class.getName());
-        loadModule(IQRegisterHandler.class.getName());
-        loadModule(IQRosterHandler.class.getName());
-        loadModule(IQTimeHandler.class.getName());
-        loadModule(IQEntityTimeHandler.class.getName());
-        loadModule(IQvCardHandler.class.getName());
-        loadModule(IQVersionHandler.class.getName());
-        loadModule(IQLastActivityHandler.class.getName());
-        loadModule(PresenceSubscribeHandler.class.getName());
-        loadModule(PresenceUpdateHandler.class.getName());
-        loadModule(IQOfflineMessagesHandler.class.getName());
-        loadModule(IQPEPHandler.class.getName());
-        loadModule(IQPEPOwnerHandler.class.getName());
-        loadModule(MulticastDNSService.class.getName());
-        loadModule(IQSharedGroupHandler.class.getName());
-        loadModule(AdHocCommandHandler.class.getName());
-        loadModule(IQPrivacyHandler.class.getName());
-        loadModule(DefaultFileTransferManager.class.getName());
-        loadModule(FileTransferProxy.class.getName());
-        loadModule(MediaProxyService.class.getName());
-        loadModule(PubSubModule.class.getName());
-        loadModule(IQDiscoInfoHandler.class.getName());
-        loadModule(IQDiscoItemsHandler.class.getName());
-        loadModule(UpdateManager.class.getName());
-        loadModule(FlashCrossDomainHandler.class.getName());
-        loadModule(InternalComponentManager.class.getName());
-        loadModule(MultiUserChatManager.class.getName());
-        loadModule(ClearspaceManager.class.getName());
-        loadModule(IQMessageCarbonsHandler.class.getName());
+//        loadModule(IQBindHandler.class.getName());
+//        loadModule(IQSessionEstablishmentHandler.class.getName());
+//        loadModule(IQAuthHandler.class.getName());
+//        loadModule(IQPingHandler.class.getName());
+//        loadModule(IQPrivateHandler.class.getName());
+//        loadModule(IQRegisterHandler.class.getName());
+//        loadModule(IQRosterHandler.class.getName());
+//        loadModule(IQTimeHandler.class.getName());
+//        loadModule(IQEntityTimeHandler.class.getName());
+//        loadModule(IQvCardHandler.class.getName());
+//        loadModule(IQVersionHandler.class.getName());
+//        loadModule(IQLastActivityHandler.class.getName());
+//        loadModule(PresenceSubscribeHandler.class.getName());
+//        loadModule(PresenceUpdateHandler.class.getName());
+//        loadModule(IQOfflineMessagesHandler.class.getName());
+//        loadModule(IQPEPHandler.class.getName());
+//        loadModule(IQPEPOwnerHandler.class.getName());
+//        loadModule(MulticastDNSService.class.getName());
+//        loadModule(IQSharedGroupHandler.class.getName());
+//        loadModule(AdHocCommandHandler.class.getName());
+//        loadModule(IQPrivacyHandler.class.getName());
+//        loadModule(DefaultFileTransferManager.class.getName());
+//        loadModule(FileTransferProxy.class.getName());
+//        loadModule(MediaProxyService.class.getName());
+//        loadModule(PubSubModule.class.getName());
+//        loadModule(IQDiscoInfoHandler.class.getName());
+//        loadModule(IQDiscoItemsHandler.class.getName());
+//        loadModule(UpdateManager.class.getName());
+//        loadModule(FlashCrossDomainHandler.class.getName());
+//        loadModule(InternalComponentManager.class.getName());
+//        loadModule(MultiUserChatManager.class.getName());
+//        loadModule(ClearspaceManager.class.getName());
+//        loadModule(IQMessageCarbonsHandler.class.getName());
 
         // Load this module always last since we don't want to start listening for clients
         // before the rest of the modules have been started
