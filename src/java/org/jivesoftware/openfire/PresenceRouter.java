@@ -81,7 +81,8 @@ public class PresenceRouter extends BasicModule {
             // Invoke the interceptors before we process the read packet
             InterceptorManager.getInstance().invokeInterceptors(packet, session, true, false);
             if (session == null || session.getStatus() != Session.STATUS_CONNECTED) {
-                handle(packet);
+                // TODO 忽略本地presence，等基于MQ的集群方案基本功能通过测试后再开放
+//                handle(packet);
             }
             else {
                 packet.setTo(session.getAddress());

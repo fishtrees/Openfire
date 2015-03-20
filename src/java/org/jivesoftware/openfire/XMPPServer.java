@@ -48,6 +48,7 @@ import org.jivesoftware.openfire.audit.spi.AuditManagerImpl;
 import org.jivesoftware.openfire.clearspace.ClearspaceManager;
 import org.jivesoftware.openfire.cluster.ClusterManager;
 import org.jivesoftware.openfire.cluster.NodeID;
+import org.jivesoftware.openfire.cluster.mq.ClientRoutingTable;
 import org.jivesoftware.openfire.commands.AdHocCommandHandler;
 import org.jivesoftware.openfire.component.InternalComponentManager;
 import org.jivesoftware.openfire.container.AdminConsolePlugin;
@@ -534,8 +535,9 @@ public class XMPPServer {
 
     private void loadModules() {
         // Load boot modules
-        loadModule(RoutingTableImpl.class.getName());// 消息路由表，根据JID路由到对应的session
-        loadModule(AuditManagerImpl.class.getName());// 消息审计
+//        loadModule(RoutingTableImpl.class.getName());// 消息路由表，根据JID路由到对应的session
+        loadModule(ClientRoutingTable.class.getName());
+//        loadModule(AuditManagerImpl.class.getName());// 消息审计
 //        loadModule(RosterManager.class.getName());// 用于处理Roster相关的IQ请求或Presence请求
 //        loadModule(PrivateStorage.class.getName());// 用于IQPrivateHandler处理jabber:iq:private的IQ请求
         // Load core modules
@@ -553,12 +555,12 @@ public class XMPPServer {
 //        loadModule(OfflineMessageStore.class.getName());
 //        loadModule(VCardManager.class.getName());
         // Load standard modules
-//        loadModule(IQBindHandler.class.getName());
-//        loadModule(IQSessionEstablishmentHandler.class.getName());
-//        loadModule(IQAuthHandler.class.getName());
+        loadModule(IQBindHandler.class.getName());
+        loadModule(IQSessionEstablishmentHandler.class.getName());
+        loadModule(IQAuthHandler.class.getName());
 //        loadModule(IQPingHandler.class.getName());
 //        loadModule(IQPrivateHandler.class.getName());
-//        loadModule(IQRegisterHandler.class.getName());
+        loadModule(IQRegisterHandler.class.getName());
 //        loadModule(IQRosterHandler.class.getName());
 //        loadModule(IQTimeHandler.class.getName());
 //        loadModule(IQEntityTimeHandler.class.getName());
@@ -1050,7 +1052,8 @@ public class XMPPServer {
      * @return the <code>RoutingTable</code> registered with this server.
      */
     public RoutingTable getRoutingTable() {
-        return (RoutingTable) modules.get(RoutingTableImpl.class);
+//        return (RoutingTable) modules.get(RoutingTableImpl.class);
+        return (RoutingTable) modules.get(ClientRoutingTable.class);
     }
 
     /**

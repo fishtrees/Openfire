@@ -18,7 +18,7 @@
  * limitations under the License.
  */
 
-package org.jivesoftware.cluster.mq;
+package org.jivesoftware.openfire.cluster.mq;
 
 import org.jivesoftware.openfire.RoutableChannelHandler;
 import org.jivesoftware.openfire.SessionManager;
