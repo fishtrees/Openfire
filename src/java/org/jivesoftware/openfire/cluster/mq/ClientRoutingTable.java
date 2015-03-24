@@ -47,8 +47,7 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
 
     public static final String C2S_CACHE_NAME = "Routing Users Cache";
     public static final String C2S_SESSION_NAME = "Routing User Sessions";
-    public static final String MQ_PRODUCER_CACHE= "MQ_PRODUCER_CACHE";
-    public static final String MQ_CONSUMER_CACHE = "MQ Consumer Cache";
+    public static final String MQ_TOPIC_INBOUND = "xmpp/in";
 
     private static final ThreadLocal<XMPPPacketReader> PARSER_CACHE = new ThreadLocal<XMPPPacketReader>()
     {
@@ -83,6 +82,7 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
 
     private Session mqSession;
     private Connection mqConnection;
+    private MessageProducer inboundProducer;
 
     private LocalRoutingTable localRoutingTable;
     private String xmppDomain;
@@ -110,23 +110,56 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
         boolean added = false;
         boolean available = destination.getPresence().isAvailable();
         localRoutingTable.addRoute(route.toString(), destination);
-
-        String topic = getMqTopicName(route);
+        Lock lockU = CacheFactory.getLock(route.toString(), usersCache);
         try {
-            // Create the destination (Topic or Queue)
-            Destination mqDest = mqSession.createTopic(topic);
-
-            // Create a MessageProducer from the Session to the Topic or Queue
-            MessageProducer producer = mqSession.createProducer(mqDest);
-            producer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
-
-            messageProducerCache.put(topic, producer);
-        } catch (JMSException e) {
-            logger.error("addClientRoute: create mq producer failed, " + e.getMessage(), e);
+            lockU.lock();
+            added = usersCache.put(route.toString(), new ClientRoute(server.getNodeID(), available)) == null;
+        } finally {
+            lockU.unlock();
         }
+        // Add the session to the list of user sessions
+        if (route.getResource() != null && (!available || added)) {
+            Lock lock = CacheFactory.getLock(route.toBareJID(), usersSessions);
+            try {
+                lock.lock();
+                Collection<String> jids = usersSessions.get(route.toBareJID());
+                if (jids == null) {
+                    jids = new ConcurrentHashSet<String>();
+                }
+                jids.add(route.toString());
+                usersSessions.put(route.toBareJID(), jids);
+            } finally {
+                lock.unlock();
+            }
+            createMqPeers(route);
+        }
+
+        logger.debug("route: " + route.toString() + " added.");
+
+        return added;
+    }
+
+    private void createMqPeers(JID route) {
+//        // 创建入站消息发布者
+//        String inTopic = getInboundMqTopicName(route);
+//        try {
+//            // Create the destination (Topic or Queue)
+//            Destination mqDest = mqSession.createTopic(inTopic);
+//
+//            // Create a MessageProducer from the Session to the Topic or Queue
+//            MessageProducer producer = mqSession.createProducer(mqDest);
+//            producer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
+//
+//            messageProducerCache.put(inTopic, producer);
+//        } catch (JMSException e) {
+//            logger.error("addClientRoute: create mq producer failed, " + e.getMessage(), e);
+//        }
+
+        // 订阅出站消息
+        String outTopic = getOutboundMqTopicName(route);
         try {
             // Create the destination (Topic or Queue)
-            Destination mqDest = mqSession.createTopic(topic);
+            Destination mqDest = mqSession.createTopic(outTopic);
 
             // Create a MessageProducer from the Session to the Topic or Queue
             MessageConsumer consumer = mqSession.createConsumer(mqDest);
@@ -176,56 +209,49 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
                 }
             });
 
-            messageConsumerCache.put(topic, consumer);
+            messageConsumerCache.put(outTopic, consumer);
         } catch (JMSException e) {
             logger.error("addClientRoute: create mq producer failed, " + e.getMessage(), e);
         }
-
-
-        Lock lockU = CacheFactory.getLock(route.toString(), usersCache);
-        try {
-            lockU.lock();
-            added = usersCache.put(route.toString(), new ClientRoute(server.getNodeID(), available)) == null;
-        } finally {
-            lockU.unlock();
-        }
-        // Add the session to the list of user sessions
-        if (route.getResource() != null && (!available || added)) {
-            Lock lock = CacheFactory.getLock(route.toBareJID(), usersSessions);
-            try {
-                lock.lock();
-                Collection<String> jids = usersSessions.get(route.toBareJID());
-                if (jids == null) {
-                    jids = new ConcurrentHashSet<String>();
-                }
-                jids.add(route.toString());
-                usersSessions.put(route.toBareJID(), jids);
-            } finally {
-                lock.unlock();
-            }
-        }
-
-        logger.debug("route: " + route.toString() + " added.");
-
-        return added;
     }
 
     public void routePacket(JID jid, Packet packet, boolean fromServer) throws PacketException {
-        sendToMq(getMqTopicName(jid), packet.toXML());
+        // TODO 在Openfire只负责C2S的事务时需要去掉下面的判断
+        // 因为Openfire目前除了作为C2S服务器外还负责进行用户验证，自身会生成一些stanza发送给客户端，所以如果
+        // 是非Message类型，就需要判断是不是直接可以发送给客户端，而不用到MQ去中转
+        if (packet instanceof IQ) {
+            IQ iq = (IQ) packet;
+            if (iq.getType() == IQ.Type.result || iq.getType() == IQ.Type.error) {
+                boolean routed = routeToLocalDomain(iq.getTo(), iq, fromServer);
+                if (routed) {
+                    return;
+                }
+            }
+        } else if (packet instanceof Presence) {
+            boolean routed = routeToLocalDomain(packet.getTo(), packet, fromServer);
+            if (routed) {
+                return;
+            }
+        }
+        sendToMq(getInboundMqTopicName(jid), packet.toXML());
     }
 
-    private static String getMqTopicName(JID jid) {
-        return "xmpp.packet." + jid.toBareJID();
+    private static String getInboundMqTopicName(JID jid) {
+        return "xmpp/in" + jid.toBareJID();
+    }
+    private static String getOutboundMqTopicName(JID jid) {
+        return "xmpp/out/" + jid.toBareJID();
     }
 
     private void sendToMq(String topic, String data) {
         try {
-            MessageProducer producer = getMessageProducer(topic);
+//            MessageProducer producer = getMessageProducer(topic);
+            MessageProducer producer = inboundProducer;
             // Create a messages
             TextMessage message = mqSession.createTextMessage(data);
             // Tell the producer to send the message
             producer.send(message);
-            logger.debug("Sent message: " + message.hashCode() + " : " + Thread.currentThread().getName());
+            logger.info("Sent message: " + message.hashCode() + " : " + Thread.currentThread().getName());
         }
         catch (Exception e) {
             logger.error("sendToMq failed: " + e, e);
@@ -260,8 +286,7 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
 
     public ClientSession getClientRoute(JID jid) {
         // Check if this session is hosted by this cluster node
-        ClientSession session = (ClientSession) localRoutingTable.getRoute(jid.toString());
-        return session;
+        return (ClientSession) localRoutingTable.getRoute(jid.toString());
     }
 
     public Collection<ClientSession> getClientsRoutes(boolean onlyLocal) {
@@ -363,9 +388,10 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
             }
         }
 
-        String topic = getMqTopicName(route);
-        messageProducerCache.remove(topic);
-        messageConsumerCache.remove(topic);
+        String inTopic = getInboundMqTopicName(route);
+        String outTopic = getOutboundMqTopicName(route);
+        messageProducerCache.remove(inTopic);
+        messageConsumerCache.remove(outTopic);
 
         localRoutingTable.removeRoute(address);
 
@@ -422,8 +448,7 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
             ActiveMQConnectionFactory connectionFactory = new ActiveMQConnectionFactory("tcp://localhost:61616?trace=false&soTimeout=60000");
 
             // Create a Connection
-            Connection connection = null;
-            connection = connectionFactory.createConnection();
+            Connection connection = connectionFactory.createConnection();
             connection.start();
 
             // Create a Session
@@ -432,6 +457,10 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
             mqConnection = connection;
             mqSession = session;
 
+            Destination destination = mqSession.createTopic(MQ_TOPIC_INBOUND);
+            inboundProducer = mqSession.createProducer(destination);
+            inboundProducer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
+
         } catch (JMSException e) {
             logger.error("start jms client failed, " + e.getMessage(), e);
             throw new IllegalStateException(e.getMessage(), e);
@@ -439,6 +468,9 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
     }
 
     private void stopJmsClient() throws JMSException {
+        if (null != inboundProducer) {
+            inboundProducer.close();
+        }
         if (null != mqSession) {
             mqSession.close();
         }
