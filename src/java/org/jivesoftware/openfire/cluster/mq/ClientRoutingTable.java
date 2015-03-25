@@ -233,7 +233,23 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
                 return;
             }
         }
-        sendToMq(getInboundMqTopicName(jid), packet.toXML());
+        if (sendToMq(getInboundMqTopicName(jid), packet.toXML())) {
+            if (packet instanceof Message) {
+                Message inMsg = (Message)packet;
+                PacketExtension extension = inMsg.getExtension(MessageReceipt.ELEMENT_NAME, MessageReceipt.ELEMENT_NAMESPACE);
+                if (null == extension) {
+                    // 该消息不是回执的情况才给客户端发送回执，说明Message已收到
+                    Message msg = new Message();
+                    msg.setTo(packet.getFrom());
+                    msg.setFrom(xmppDomain);
+                    msg.setID(UUID.randomUUID().toString());
+                    MessageReceipt receipt = new MessageReceipt();
+                    receipt.setId(packet.getID());
+                    msg.addExtension(receipt);
+                    routeToLocalDomain(msg.getTo(), msg, true);
+                }
+            }
+        }
     }
 
     private static String getInboundMqTopicName(JID jid) {
@@ -243,7 +259,7 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
         return "xmpp/out/" + jid.toBareJID();
     }
 
-    private void sendToMq(String topic, String data) {
+    private boolean sendToMq(String topic, String data) {
         try {
 //            MessageProducer producer = getMessageProducer(topic);
             MessageProducer producer = inboundProducer;
@@ -252,9 +268,11 @@ public class ClientRoutingTable extends BasicModule implements RoutingTable {
             // Tell the producer to send the message
             producer.send(message);
             logger.info("Sent message: " + message.hashCode() + " : " + Thread.currentThread().getName());
+            return true;
         }
         catch (Exception e) {
             logger.error("sendToMq failed: " + e, e);
+            return false;
         }
     }
 
